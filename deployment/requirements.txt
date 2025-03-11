@@ -1,0 +1,11 @@
+discord.py>=2.3.2
+alpaca-trade-api>=3.0.2
+yfinance>=0.2.36
+pandas>=2.2.1
+numpy>=1.26.4
+python-dotenv>=1.0.1
+ta>=0.11.0
+langchain>=0.1.9
+langchain-community>=0.0.27
+google-generativeai>=0.3.2
+aiohttp>=3.8.3 
