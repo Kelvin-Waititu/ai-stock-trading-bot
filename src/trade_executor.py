@@ -88,22 +88,36 @@ def execute_trade(symbol, side, quantity=None):
 
         # Try to place the order
         try:
-            # Set limit price slightly above ask for buy or below bid for sell to ensure fill
-            limit_price = round(current_price * (1.001 if side == "buy" else 0.999), 2)
+            # First attempt - market order during regular hours
+            if not api.get_clock().is_open:
+                # More aggressive limit price for extended hours
+                limit_price = round(
+                    current_price * (1.005 if side == "buy" else 0.995), 2
+                )
+                order_type = "limit"
+                time_in_force = "day"
+                extended_hours = True
+            else:
+                # During market hours, use market orders
+                order_type = "market"
+                time_in_force = "day"
+                extended_hours = False
+                limit_price = None
 
-            # Submit limit order
+            # Submit order
             order = api.submit_order(
                 symbol=symbol,
                 qty=quantity,
                 side=side,
-                type="limit",
-                time_in_force="day",
+                type=order_type,
+                time_in_force=time_in_force,
                 limit_price=limit_price,
-                extended_hours=True,
+                extended_hours=extended_hours,
             )
 
-            # Short wait for fill
-            time.sleep(1)
+            # Wait for fill - longer during extended hours
+            wait_time = 5 if api.get_clock().is_open else 10
+            time.sleep(wait_time)
 
             # Check order status
             filled_order = api.get_order(order.id)
@@ -119,12 +133,13 @@ def execute_trade(symbol, side, quantity=None):
                     f"   • Total Value: ${total_value:.2f}"
                 )
 
-            # If not filled immediately, try with a more aggressive price
+            # If not filled, try again with more aggressive pricing
             if filled_order.status != "filled":
                 api.cancel_order(order.id)
-                # More aggressive limit price (0.2% above ask for buy or below bid for sell)
+
+                # Even more aggressive limit price
                 limit_price = round(
-                    current_price * (1.002 if side == "buy" else 0.998), 2
+                    current_price * (1.01 if side == "buy" else 0.99), 2
                 )
 
                 order = api.submit_order(
@@ -137,7 +152,7 @@ def execute_trade(symbol, side, quantity=None):
                     extended_hours=True,
                 )
 
-                time.sleep(1)
+                time.sleep(wait_time)
                 filled_order = api.get_order(order.id)
 
                 if filled_order.status == "filled":
@@ -153,7 +168,10 @@ def execute_trade(symbol, side, quantity=None):
                     )
                 else:
                     api.cancel_order(order.id)
-                    return f"❌ Order not filled. Current {side} price: ${current_price:.2f}"
+                    return (
+                        f"❌ Order not filled. Try during market hours (9:30 AM - 4:00 PM ET)\n"
+                        f"Current {side} price: ${current_price:.2f}"
+                    )
 
         except Exception as e:
             return f"❌ Order failed: {str(e)}"
