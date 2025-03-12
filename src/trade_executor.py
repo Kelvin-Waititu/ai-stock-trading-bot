@@ -86,22 +86,26 @@ def execute_trade(symbol, side, quantity=None):
             if quantity > current_position_qty:
                 return f"❌ Cannot sell {quantity} shares, only have {current_position_qty}."
 
-        # Submit order with notional value to ensure it fills
+        # Try to place the order
         try:
-            notional = round(current_price * quantity, 2)
+            # Set limit price slightly above ask for buy or below bid for sell to ensure fill
+            limit_price = round(current_price * (1.001 if side == "buy" else 0.999), 2)
+
+            # Submit limit order
             order = api.submit_order(
                 symbol=symbol,
-                notional=notional,  # Use notional instead of quantity
+                qty=quantity,
                 side=side,
-                type="market",
+                type="limit",
                 time_in_force="day",
-                extended_hours=True,  # Allow extended hours trading
+                limit_price=limit_price,
+                extended_hours=True,
             )
 
             # Short wait for fill
             time.sleep(1)
 
-            # Get filled order details
+            # Check order status
             filled_order = api.get_order(order.id)
             if filled_order.status == "filled":
                 filled_price = float(filled_order.filled_avg_price)
@@ -114,14 +118,22 @@ def execute_trade(symbol, side, quantity=None):
                     f"   • Price: ${filled_price:.2f}\n"
                     f"   • Total Value: ${total_value:.2f}"
                 )
-            else:
-                # If not filled, try one more time with regular quantity
+
+            # If not filled immediately, try with a more aggressive price
+            if filled_order.status != "filled":
+                api.cancel_order(order.id)
+                # More aggressive limit price (0.2% above ask for buy or below bid for sell)
+                limit_price = round(
+                    current_price * (1.002 if side == "buy" else 0.998), 2
+                )
+
                 order = api.submit_order(
                     symbol=symbol,
                     qty=quantity,
                     side=side,
-                    type="market",
+                    type="limit",
                     time_in_force="day",
+                    limit_price=limit_price,
                     extended_hours=True,
                 )
 
@@ -141,36 +153,10 @@ def execute_trade(symbol, side, quantity=None):
                     )
                 else:
                     api.cancel_order(order.id)
-                    return f"❌ Order not filled after retries. Please try again."
+                    return f"❌ Order not filled. Current {side} price: ${current_price:.2f}"
 
         except Exception as e:
-            # If notional order fails, try regular quantity order
-            order = api.submit_order(
-                symbol=symbol,
-                qty=quantity,
-                side=side,
-                type="market",
-                time_in_force="day",
-                extended_hours=True,
-            )
-
-            time.sleep(1)
-            filled_order = api.get_order(order.id)
-
-            if filled_order.status == "filled":
-                filled_price = float(filled_order.filled_avg_price)
-                filled_qty = float(filled_order.filled_qty)
-                total_value = filled_price * filled_qty
-                return (
-                    f"✅ {side.upper()} order filled:\n"
-                    f"   • Symbol: {symbol}\n"
-                    f"   • Quantity: {filled_qty} shares\n"
-                    f"   • Price: ${filled_price:.2f}\n"
-                    f"   • Total Value: ${total_value:.2f}"
-                )
-            else:
-                api.cancel_order(order.id)
-                return f"❌ Order not filled. Please try again."
+            return f"❌ Order failed: {str(e)}"
 
     except Exception as e:
         error_msg = str(e).lower()
