@@ -76,18 +76,6 @@ def execute_trade(symbol, side, quantity=None):
                 if quantity <= 0:
                     return "❌ Maximum position size would be exceeded."
 
-            # Place buy order with limit price
-            limit_price = round(current_price * 1.02, 2)  # 2% above current price
-            order = api.submit_order(
-                symbol=symbol,
-                qty=quantity,
-                side="buy",
-                type="limit",
-                time_in_force="day",
-                limit_price=limit_price,
-                order_class="simple",
-            )
-
         else:  # sell
             if current_position_qty <= 0:
                 return "❌ No position to sell."
@@ -97,17 +85,15 @@ def execute_trade(symbol, side, quantity=None):
             if quantity > current_position_qty:
                 return f"❌ Cannot sell {quantity} shares, only have {current_position_qty}."
 
-            # Place sell order with limit price
-            limit_price = round(current_price * 0.98, 2)  # 2% below current price
-            order = api.submit_order(
-                symbol=symbol,
-                qty=quantity,
-                side="sell",
-                type="limit",
-                time_in_force="day",
-                limit_price=limit_price,
-                order_class="simple",
-            )
+        # Place order as market order for immediate execution
+        order = api.submit_order(
+            symbol=symbol,
+            qty=quantity,
+            side=side,
+            type="market",
+            time_in_force="gtc",
+            order_class="simple",
+        )
 
         # Wait for order fill
         if wait_for_order_fill(order.id):
@@ -126,10 +112,7 @@ def execute_trade(symbol, side, quantity=None):
             return f"❌ Order timeout - cancelled after 60 seconds."
 
     except Exception as e:
-        error_msg = str(e)
-        if "wash trade" in error_msg.lower():
-            return "❌ Trade rejected: Potential wash trade detected. Please wait before trading this symbol again."
-        return f"❌ Trade execution failed: {error_msg}"
+        return f"❌ Trade execution failed: {str(e)}"
 
 
 def get_position(symbol):
