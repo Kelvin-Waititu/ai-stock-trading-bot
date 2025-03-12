@@ -8,11 +8,12 @@ api = tradeapi.REST(
 )
 
 
-def get_current_price(symbol):
+def get_current_price(symbol, side="buy"):
     """Get current price of a stock."""
     try:
-        bars = api.get_latest_bar(symbol)
-        return bars.c
+        quote = api.get_latest_quote(symbol)
+        # Use ask price for buying, bid price for selling
+        return float(quote.ask_price) if side == "buy" else float(quote.bid_price)
     except Exception as e:
         raise Exception(f"Error fetching price for {symbol}: {str(e)}")
 
@@ -54,8 +55,8 @@ def execute_trade(symbol, side, quantity=None):
             current_position_qty = 0
             current_position_value = 0
 
-        # Get current price
-        current_price = get_current_price(symbol)
+        # Get current price based on side
+        current_price = get_current_price(symbol, side)
 
         if side == "buy":
             # Calculate quantity if not provided
@@ -85,17 +86,20 @@ def execute_trade(symbol, side, quantity=None):
             if quantity > current_position_qty:
                 return f"❌ Cannot sell {quantity} shares, only have {current_position_qty}."
 
-        # Place simple market order for immediate execution
+        # Place market order with immediate execution
         order = api.submit_order(
             symbol=symbol,
             qty=quantity,
             side=side,
             type="market",
-            time_in_force="ioc",  # Immediate-or-cancel for instant execution
+            time_in_force="gtc",  # Changed to GTC for better fill probability
             order_class="simple",
         )
 
-        # Check order status immediately
+        # Give a short window for the order to fill
+        time.sleep(2)  # Wait 2 seconds for fill
+
+        # Check order status
         order = api.get_order(order.id)
         if order.status == "filled":
             filled_price = float(order.filled_avg_price)
@@ -107,9 +111,20 @@ def execute_trade(symbol, side, quantity=None):
                 f"   • Price: ${filled_price:.2f}\n"
                 f"   • Total Value: ${total_value:.2f}"
             )
+        elif order.status == "partially_filled":
+            filled_qty = int(order.filled_qty)
+            filled_price = float(order.filled_avg_price)
+            total_value = filled_price * filled_qty
+            return (
+                f"✅ {side.upper()} order partially filled:\n"
+                f"   • Symbol: {symbol}\n"
+                f"   • Quantity: {filled_qty}/{quantity} shares\n"
+                f"   • Price: ${filled_price:.2f}\n"
+                f"   • Total Value: ${total_value:.2f}"
+            )
         else:
             api.cancel_order(order.id)
-            return "❌ Order could not be filled immediately. Please try again."
+            return f"❌ Order not filled. Current {side} price: ${current_price:.2f}"
 
     except Exception as e:
         return f"❌ Trade execution failed: {str(e)}"
