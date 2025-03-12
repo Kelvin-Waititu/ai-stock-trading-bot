@@ -2,6 +2,8 @@
 
 An intelligent trading bot that uses AI to analyze stocks, execute trades, and provide real-time market insights through Discord.
 
+[![Join our Discord](https://img.shields.io/badge/Discord-Join%20Server-7289DA?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/TA7HEwzz)
+
 ## Contributors 👥
 
 - **Kelvin Waititu** - Core Developer
@@ -110,6 +112,8 @@ The bot implements several measures to handle API rate limits and quotas:
 
 ## Usage 💡
 
+Join our [Discord server](https://discord.gg/TA7HEwzz) to interact with the bot.
+
 Start the bot:
 
 ```bash
@@ -154,7 +158,6 @@ ai-stock-trading-bot/
 - google-generativeai - Gemini AI model
 - pandas & numpy - Data processing
 - python-dotenv - Environment management
-
 
 ## Contributing 🤝
 
