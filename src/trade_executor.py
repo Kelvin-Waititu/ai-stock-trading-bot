@@ -51,9 +51,11 @@ def execute_trade(symbol, side, quantity=None):
             position = api.get_position(symbol)
             current_position_qty = int(position.qty)
             current_position_value = float(position.market_value)
+            last_trade_time = position.lastday_price_time  # Get last trade time
         except Exception:
             current_position_qty = 0
             current_position_value = 0
+            last_trade_time = None
 
         # Get current price based on side
         current_price = get_current_price(symbol, side)
@@ -174,16 +176,53 @@ def execute_trade(symbol, side, quantity=None):
                     )
 
         except Exception as e:
+            error_str = str(e).lower()
+            if "wash" in error_str:
+                return (
+                    "❌ Wash Trade Prevention:\n"
+                    "A wash trade occurs when you try to buy and sell the same stock too quickly.\n"
+                    "To avoid this:\n"
+                    "1. Wait a few minutes between trades\n"
+                    "2. Try trading a different quantity\n"
+                    "3. Consider trading during market hours\n"
+                    f"Current {side} price: ${current_price:.2f}"
+                )
             return f"❌ Order failed: {str(e)}"
 
     except Exception as e:
         error_msg = str(e).lower()
         if "insufficient buying power" in error_msg:
-            return "❌ Insufficient buying power for this trade."
+            return (
+                "❌ Insufficient Buying Power:\n"
+                f"Required: ${quantity * current_price:.2f}\n"
+                f"Available: ${buying_power:.2f}"
+            )
         elif "position" in error_msg:
-            return "❌ Error with position size or current holdings."
+            return (
+                "❌ Position Error:\n"
+                f"Current Position: {current_position_qty} shares\n"
+                f"Attempting to trade: {quantity} shares\n"
+                f"Current Price: ${current_price:.2f}"
+            )
+        elif "wash" in error_msg:
+            return (
+                "❌ Wash Trade Prevention:\n"
+                "A wash trade occurs when you try to buy and sell the same stock too quickly.\n"
+                "To avoid this:\n"
+                "1. Wait a few minutes between trades\n"
+                "2. Try trading a different quantity\n"
+                "3. Consider trading during market hours\n"
+                f"Current {side} price: ${current_price:.2f}"
+            )
         else:
-            return f"❌ Trade execution failed: {str(e)}"
+            return (
+                f"❌ Trade Error:\n"
+                f"Symbol: {symbol}\n"
+                f"Action: {side.upper()}\n"
+                f"Quantity: {quantity}\n"
+                f"Price: ${current_price:.2f}\n"
+                f"Error: {str(e)}"
+            )
 
 
 def get_position(symbol):
