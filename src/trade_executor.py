@@ -47,15 +47,18 @@ def execute_trade(symbol, side, quantity=None):
         max_trade_value = portfolio_value * MAX_POSITION_SIZE
 
         # Get current position if exists
+        current_position_qty = 0
+        current_position_value = 0
         try:
             position = api.get_position(symbol)
-            current_position_qty = int(position.qty)
-            current_position_value = float(position.market_value)
-            last_trade_time = position.lastday_price_time  # Get last trade time
-        except Exception:
-            current_position_qty = 0
-            current_position_value = 0
-            last_trade_time = None
+            if position:
+                current_position_qty = abs(int(position.qty))  # Use absolute value
+                current_position_value = abs(
+                    float(position.market_value)
+                )  # Use absolute value
+        except Exception as e:
+            if "no position available" not in str(e).lower():
+                print(f"Error checking position: {str(e)}")
 
         # Get current price based on side
         current_price = get_current_price(symbol, side)
@@ -80,13 +83,36 @@ def execute_trade(symbol, side, quantity=None):
                     return "❌ Maximum position size would be exceeded."
 
         else:  # sell
-            if current_position_qty <= 0:
-                return "❌ No position to sell."
+            try:
+                # Double-check position exists and quantity
+                position = api.get_position(symbol)
+                current_position_qty = abs(int(position.qty))
 
-            # Use provided quantity or sell entire position
-            quantity = quantity if quantity else current_position_qty
-            if quantity > current_position_qty:
-                return f"❌ Cannot sell {quantity} shares, only have {current_position_qty}."
+                if current_position_qty <= 0:
+                    return (
+                        "❌ No Position Found:\n"
+                        f"Symbol: {symbol}\n"
+                        "You must own shares before selling."
+                    )
+
+                # Use provided quantity or sell entire position
+                quantity = quantity if quantity else current_position_qty
+                if quantity > current_position_qty:
+                    return (
+                        "❌ Invalid Sell Quantity:\n"
+                        f"Attempting to sell: {quantity} shares\n"
+                        f"Current position: {current_position_qty} shares\n"
+                        "You cannot sell more shares than you own."
+                    )
+
+            except Exception as e:
+                if "no position available" in str(e).lower():
+                    return (
+                        "❌ No Position Found:\n"
+                        f"Symbol: {symbol}\n"
+                        "You must own shares before selling."
+                    )
+                return f"❌ Error verifying position: {str(e)}"
 
         # Try to place the order
         try:
