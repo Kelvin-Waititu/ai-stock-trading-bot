@@ -37,7 +37,7 @@ def wait_for_order_fill(order_id, timeout=60):
 
 
 def execute_trade(symbol, side, quantity=None):
-    """Execute a trade with complex order handling."""
+    """Execute a trade with simple market orders."""
     try:
         # Get account information
         account = api.get_account()
@@ -76,16 +76,6 @@ def execute_trade(symbol, side, quantity=None):
                 if quantity <= 0:
                     return "❌ Maximum position size would be exceeded."
 
-            # Place buy order
-            order = api.submit_order(
-                symbol=symbol,
-                qty=quantity,
-                side="buy",
-                type="market",
-                time_in_force="gtc",
-                order_class="simple",
-            )
-
         else:  # sell
             if current_position_qty <= 0:
                 return "❌ No position to sell."
@@ -95,30 +85,20 @@ def execute_trade(symbol, side, quantity=None):
             if quantity > current_position_qty:
                 return f"❌ Cannot sell {quantity} shares, only have {current_position_qty}."
 
-            # Calculate take profit and stop loss prices
-            take_profit_price = round(current_price * 1.02, 2)  # 2% above current price
-            stop_loss_price = round(current_price * 0.98, 2)  # 2% below current price
+        # Place simple market order for immediate execution
+        order = api.submit_order(
+            symbol=symbol,
+            qty=quantity,
+            side=side,
+            type="market",
+            time_in_force="ioc",  # Immediate-or-cancel for instant execution
+            order_class="simple",
+        )
 
-            # Place bracket order for selling
-            order = api.submit_order(
-                symbol=symbol,
-                qty=quantity,
-                side="sell",
-                type="limit",
-                time_in_force="gtc",
-                limit_price=current_price,
-                order_class="bracket",
-                take_profit={"limit_price": take_profit_price},
-                stop_loss={
-                    "stop_price": stop_loss_price,
-                    "limit_price": stop_loss_price,
-                },
-            )
-
-        # Wait for order fill
-        if wait_for_order_fill(order.id):
-            filled_order = api.get_order(order.id)
-            filled_price = float(filled_order.filled_avg_price)
+        # Check order status immediately
+        order = api.get_order(order.id)
+        if order.status == "filled":
+            filled_price = float(order.filled_avg_price)
             total_value = filled_price * quantity
             return (
                 f"✅ {side.upper()} order filled:\n"
@@ -129,17 +109,9 @@ def execute_trade(symbol, side, quantity=None):
             )
         else:
             api.cancel_order(order.id)
-            return f"❌ Order timeout - cancelled after 60 seconds."
+            return "❌ Order could not be filled immediately. Please try again."
 
     except Exception as e:
-        error_msg = str(e)
-        if "wash trade" in error_msg.lower():
-            return (
-                "❌ Trade rejected: To avoid wash trade, try:\n"
-                "1. Selling a different quantity\n"
-                "2. Waiting a few minutes between trades\n"
-                "3. Using a limit price slightly different from market price"
-            )
         return f"❌ Trade execution failed: {str(e)}"
 
 
